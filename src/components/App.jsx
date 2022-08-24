@@ -1,92 +1,88 @@
 import { Component } from 'react';
-import { nanoid } from 'nanoid';
-import { Container, Title, ContcTitle, Section } from './Phonebook.styled';
-import { ContactForm } from './contactForm/ContactForm';
-import { Filter } from './filter/Filter';
-import { ContactList } from './contactList/ContactList';
+import axios from 'axios';
+import { ImageGallery } from './imageGallery/ImageGallery';
+import { Searchbar } from './searchbar/Searchbar';
+import { Button } from './button/Button';
+import { Loader } from './loader/Loader';
+import { Modal } from 'components/modal/Modal';
+import { animateScroll as scroll } from 'react-scroll';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-const LS_KEY = 'contacts';
 export class App extends Component {
   state = {
-    contacts: [
-      { id: 'id-1', name: 'Rosie Simpson', number: '459-12-56' },
-      { id: 'id-2', name: 'Hermione Kline', number: '443-89-12' },
-      { id: 'id-3', name: 'Eden Clements', number: '645-17-79' },
-      { id: 'id-4', name: 'Annie Copeland', number: '227-91-26' },
-    ],
-    filter: '',
+    searchValue: '',
+    pictures: [],
+    page: 1,
+    modalImage: '',
+    isLoading: false,
+    totalResults: null,
   };
-
-  componentDidMount() {
-    const savesContacts = JSON.parse(localStorage.getItem(LS_KEY));
-    if (savesContacts !== null) {
-      this.setState({ contacts: savesContacts });
-    }
-  }
 
   componentDidUpdate(_, prevState) {
-    if (prevState.contacts !== this.state.contacts) {
-      localStorage.setItem(LS_KEY, JSON.stringify(this.state.contacts));
-      console.log(localStorage.getItem('contacts'));
+    const { searchValue, page, pictures } = this.state;
+    if (prevState.searchValue !== searchValue || prevState.page !== page) {
+      this.setState({ isLoading: true });
+      axios
+        .get(
+          `https://pixabay.com/api/?q=${searchValue}&page=${page}&key=25249290-2b9b53acf0b6f227aa978e658&image_type=photo&orientation=horizontal&per_page=12`
+        )
+        .then(res => {
+          this.setState({
+            pictures: [...pictures, ...res.data.hits],
+            totalResults: res.data.totalHits,
+            isLoading: false,
+          });
+          if (res.data.hits.length === 0) {
+            toast.warn('No pictures for your request', {
+              position: 'bottom-center',
+            });
+          }
+        })
+        .catch(error => {
+          console.log(error);
+        });
     }
   }
 
-  handleSubmit = (values, { resetForm }) => {
-    if (
-      this.state.contacts.find(
-        contact =>
-          contact.name.toLowerCase().trim() === values.name.toLowerCase().trim()
-      )
-    ) {
-      alert(`${values.name} is already in contacts`);
-      return;
-    }
-    const newContact = {
-      id: nanoid(5),
-      name: values.name,
-      number: values.number,
-    };
+  handleFormSubmit = searchValue => {
+    this.setState({ pictures: [], page: 1 });
+    this.setState({ searchValue });
+  };
+
+  onLoadButtonClick = () => {
     this.setState(prevState => ({
-      contacts: [...prevState.contacts, newContact],
+      page: prevState.page + 1,
     }));
-    resetForm();
+    scroll.scrollToBottom();
   };
 
-  onChangeFilter = evt => {
-    this.setState({
-      filter: evt.currentTarget.value,
-    });
+  onModal = modalImage => {
+    this.setState({ modalImage });
   };
 
-  findContact = () => {
-    const { filter, contacts } = this.state;
-    return contacts.filter(contact =>
-      contact.name.toLowerCase().trim().includes(filter.toLowerCase().trim())
-    );
-  };
-
-  handleDeleteContact = id => {
-    this.setState(prevState => ({
-      contacts: prevState.contacts.filter(contact => contact.id !== id),
-    }));
+  onModalClose = () => {
+    this.setState({ modalImage: '' });
   };
 
   render() {
-    const { filter } = this.state;
-    const results = this.findContact();
+    const { pictures, isLoading, totalResults, modalImage } = this.state;
     return (
-      <Container>
-        <Section>
-          <Title>Phonebook</Title>
-          <ContactForm onHandleSubmit={this.handleSubmit} />
-          <ContcTitle>Contacts</ContcTitle>
-          <Filter filter={filter} onChangeFilter={this.onChangeFilter} />
-          <ContactList
-            contacts={results}
-            handleDeleteContact={this.handleDeleteContact}
-          />
-        </Section>
-      </Container>
+      <div>
+        <Searchbar onSubmit={this.handleFormSubmit} />
+        <ImageGallery resultSearch={pictures} onModal={this.onModal} />
+        {pictures.length !== 0 && totalResults !== pictures.length && (
+          <Button onClick={this.onLoadButtonClick} />
+        )}
+        {isLoading && <Loader />}
+        {modalImage !== '' && (
+          <Modal onModalClose={this.onModalClose}>
+            <img src={modalImage} alt="" />
+          </Modal>
+        )}
+
+        <ToastContainer />
+      </div>
     );
   }
 }
